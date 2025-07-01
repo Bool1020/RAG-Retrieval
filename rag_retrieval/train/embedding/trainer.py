@@ -64,11 +64,24 @@ class Trainer:
             for batch_index, batch in enumerate(self.train_dataloader):
                 with self.accelerator.accumulate(self.model):
                     self.optimizer.zero_grad()
-                
-                    batch_output=self.model(**batch,accelerator=self.accelerator)
-                    loss = batch_output['loss']
-
-                    self.accelerator.backward(loss)
+                    if isinstance(batch, list):
+                        loss = torch.tensor(0.0, device=self.model.device)
+                        batch_output = {}
+                        for idx, sub_batch in enumerate(batch):
+                            sub_batch_output = self.model(**sub_batch, accelerator=self.accelerator)
+                            sub_loss = sub_batch_output["loss"] / len(batch)
+                            self.accelerator.backward(sub_loss)
+                            loss += sub_loss
+                            for key in sub_batch_output:
+                                if key.startwith("accuracy"):
+                                    if (key+f"_task_{idx}") not in batch_output:
+                                        batch_output[key+f"_task_{idx}"] = sub_batch_output[key]
+                                    else:
+                                        batch_output[key+f"_task_{idx}"] += sub_batch_output[key]
+                    else:
+                        batch_output=self.model(**batch,accelerator=self.accelerator)
+                        loss = batch_output['loss']
+                        self.accelerator.backward(loss)
                     self.optimizer.step()
                     
                     self.lr_scheduler.step()
@@ -194,14 +207,27 @@ def evaluate(
     validation_dict = {}
     for batch in dataloader:
         with torch.inference_mode():
-            batch_output = model(**batch, accelerator=accelerator)
-            loss_tracker.update(batch_output['loss'])
-            for key in batch_output:
-                if key.startswith('accuracy'):
-                    if key not in validation_dict:
-                        validation_dict[key] = batch_output[key]
-                    else:
-                        validation_dict[key] += batch_output[key]
+            if isinstance(batch, list):
+                loss = torch.tensor(0.0, device=self.model.device)
+                    for idx, sub_batch in enumerate(batch):
+                        batch_output = model(**sub_batch, accelerator=self.accelerator)
+                        loss += batch_output["loss"] / len(batch)
+                        for key in batch_output:
+                            if key.startwith("accuracy"):
+                                if (key+f"_task_{idx}") not in validation_dict:
+                                    validation_dict[key+f"_task_{idx}"] = batch_output[key]
+                                else:
+                                    validation_dict[key+f"_task_{idx}"] += batch_output[key]
+                loss_tracker.update(loss)
+            else:
+                batch_output = model(**batch, accelerator=accelerator)
+                loss_tracker.update(batch_output['loss'])
+                for key in batch_output:
+                    if key.startswith('accuracy'):
+                        if key not in validation_dict:
+                            validation_dict[key] = batch_output[key]
+                        else:
+                            validation_dict[key] += batch_output[key]
     for key in validation_dict:
         if key.startswith('accuracy'):
             validation_dict[key] = validation_dict[key] / len(dataloader)
