@@ -209,15 +209,15 @@ def evaluate(
         with torch.inference_mode():
             if isinstance(batch, list):
                 loss = torch.tensor(0.0, device=self.model.device)
-                    for idx, sub_batch in enumerate(batch):
-                        batch_output = model(**sub_batch, accelerator=self.accelerator)
-                        loss += batch_output["loss"] / len(batch)
-                        for key in batch_output:
-                            if key.startwith("accuracy"):
-                                if (key+f"_task_{idx}") not in validation_dict:
-                                    validation_dict[key+f"_task_{idx}"] = batch_output[key]
-                                else:
-                                    validation_dict[key+f"_task_{idx}"] += batch_output[key]
+                for idx, sub_batch in enumerate(batch):
+                    batch_output = model(**sub_batch, accelerator=self.accelerator)
+                    loss += batch_output["loss"] / len(batch)
+                    for key in batch_output:
+                        if key.startwith("accuracy"):
+                            if (key+f"_task_{idx}") not in validation_dict:
+                                validation_dict[key+f"_task_{idx}"] = batch_output[key]
+                            else:
+                                validation_dict[key+f"_task_{idx}"] += batch_output[key]
                 loss_tracker.update(loss)
             else:
                 batch_output = model(**batch, accelerator=accelerator)
