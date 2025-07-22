@@ -208,7 +208,7 @@ def evaluate(
     for batch in dataloader:
         with torch.inference_mode():
             if isinstance(batch, list):
-                loss = torch.tensor(0.0, device=self.model.device)
+                loss = torch.tensor(0.0, device=model.device)
                 for idx, sub_batch in enumerate(batch):
                     batch_output = model(**sub_batch, accelerator=self.accelerator)
                     loss += batch_output["loss"] / len(batch)
